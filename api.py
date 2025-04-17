@@ -388,7 +388,7 @@ def load_set_index(sanitized_set_name: str) -> Tuple[VectorStoreIndex, ChromaVec
 
 def store_uploaded_files(sanitized_set_name: str, files: List[UploadFile]) -> List[str]:
     """Stores uploaded files in the set's documents directory."""
-    docs_path = get_set_docs_path(sanitized_name)
+    docs_path = get_set_docs_path(sanitized_set_name)
     os.makedirs(docs_path, exist_ok=True)
     saved_file_paths = []
     for file in files:
@@ -664,74 +664,67 @@ async def create_document_set(name: str = Form(...), files: List[UploadFile] = F
     """
     Create a new document set by uploading files and processing them immediately.
     """
-    # We define sanitized_name within the try block to handle potential early errors more gracefully
-    sanitized_name = None # Initialize to None
+    # Use consistent variable name within this function scope
+    sanitized_set_name = None # Initialize
 
     try:
         if not name: raise HTTPException(status_code=400, detail="Set name cannot be empty.")
         if not files: raise HTTPException(status_code=400, detail="At least one file must be uploaded.")
 
-        sanitized_name = sanitize_name(name) # Assign sanitized_name here
-        set_base_path = get_set_base_path(sanitized_name)
-        chroma_path = get_set_chroma_path(sanitized_name)
+        # Assign to the consistent variable name
+        sanitized_set_name = sanitize_name(name)
+        # Pass the consistent variable name
+        set_base_path = get_set_base_path(sanitized_set_name)
+        chroma_path = get_set_chroma_path(sanitized_set_name)
 
         if os.path.exists(set_base_path) and os.path.exists(chroma_path) and os.listdir(chroma_path):
-            logger.warning(f"Attempt to create existing and indexed set '{sanitized_name}'.")
-            raise HTTPException(status_code=409, detail=f"Document set '{sanitized_name}' already exists and appears indexed.")
+            logger.warning(f"Attempt to create existing and indexed set '{sanitized_set_name}'.")
+            raise HTTPException(status_code=409, detail=f"Document set '{sanitized_set_name}' already exists and appears indexed.")
         elif os.path.exists(set_base_path):
-             logger.warning(f"Directory for set '{sanitized_name}' exists but seems incomplete/unindexed. Proceeding to create/overwrite.")
-             # Optionally clean up if needed: shutil.rmtree(set_base_path); time.sleep(0.1)
+             logger.warning(f"Directory for set '{sanitized_set_name}' exists but seems incomplete/unindexed. Proceeding to create/overwrite.")
 
-        saved_file_paths = store_uploaded_files(sanitized_name, files)
+        # Pass the consistent variable name
+        saved_file_paths = store_uploaded_files(sanitized_set_name, files)
         if not saved_file_paths:
             raise HTTPException(status_code=400, detail="No valid PDF files were uploaded or saved.")
 
         loop = asyncio.get_running_loop()
         try:
-            logger.info(f"Starting background file processing and indexing for set '{sanitized_name}'...")
-            # Run the potentially long-running synchronous function in a thread pool executor
+            logger.info(f"Starting background file processing and indexing for set '{sanitized_set_name}'...")
+            # Pass the consistent variable name
             success = await loop.run_in_executor(
-                None, process_and_index_files, sanitized_name, saved_file_paths
+                None, process_and_index_files, sanitized_set_name, saved_file_paths
             )
-            logger.info(f"Background processing/indexing finished for set '{sanitized_name}'. Success: {success}")
+            logger.info(f"Background processing/indexing finished for set '{sanitized_set_name}'. Success: {success}")
         except Exception as exec_err:
-            logger.error(f"Error during background processing/indexing for set '{sanitized_name}': {exec_err}", exc_info=True)
-            # Clean up potentially created directories/files on failure? Risky.
+            logger.error(f"Error during background processing/indexing for set '{sanitized_set_name}': {exec_err}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"Error during file processing: {exec_err}")
 
         if not success:
-            # Indexing function indicated failure (likely logged internally)
-            raise HTTPException(status_code=500, detail=f"Failed to process and index files for set '{sanitized_name}'. Check server logs.")
+            raise HTTPException(status_code=500, detail=f"Failed to process and index files for set '{sanitized_set_name}'. Check server logs.")
 
         return DocumentSetResponse(
-            set_name=sanitized_name,
-            message=f"Document set '{sanitized_name}' created successfully with {len(saved_file_paths)} file(s)."
+            set_name=sanitized_set_name, # Return the consistent variable name
+            message=f"Document set '{sanitized_set_name}' created successfully with {len(saved_file_paths)} file(s)."
         )
 
     except HTTPException:
-        raise # Re-raise expected HTTP exceptions cleanly
+        raise
 
     except Exception as e:
-        # --- Robust final exception handler ---
-        # Determine the identifier to use in logs/messages
-        set_identifier = name if 'name' in locals() and name else "unknown"
-        log_identifier = sanitized_name if sanitized_name else set_identifier
+        # --- Robust final exception handler (using consistent variable name) ---
+        local_vars = locals()
+        set_identifier = name if 'name' in local_vars and name else "unknown"
+        # Access the potentially undefined variable safely using .get() and the consistent name
+        log_identifier = local_vars.get('sanitized_set_name') if 'sanitized_set_name' in local_vars else set_identifier
 
         logger.error(f"Unexpected error creating document set '{log_identifier}': {e}", exc_info=True)
 
-        # Attempt cleanup? Maybe remove set_base_path if partially created and sanitized_name exists
-        # if sanitized_name and os.path.exists(get_set_base_path(sanitized_name)):
-        #    try:
-        #        shutil.rmtree(get_set_base_path(sanitized_name))
-        #        logger.info(f"Attempted cleanup of partially created set '{sanitized_name}'.")
-        #    except Exception as cleanup_err:
-        #        logger.error(f"Error during cleanup attempt for set '{sanitized_name}': {cleanup_err}", exc_info=True)
-
-
-        # Construct detail message safely, indicating original and sanitized name if different
+        # Construct detail message safely using consistent name
         detail_message = f"Internal server error creating set '{set_identifier}': {e}"
-        if sanitized_name and sanitized_name != set_identifier:
-            detail_message = f"Internal server error creating set '{set_identifier}' (sanitized as '{sanitized_name}'): {e}"
+        current_sanitized_name = local_vars.get('sanitized_set_name') # Use consistent name
+        if current_sanitized_name and current_sanitized_name != set_identifier:
+            detail_message = f"Internal server error creating set '{set_identifier}' (sanitized as '{current_sanitized_name}'): {e}"
 
         raise HTTPException(status_code=500, detail=detail_message)
         # --- End robust handler ---
