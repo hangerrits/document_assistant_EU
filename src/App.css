@@ -1,0 +1,1177 @@
+/* File: src/App.css */
+.app-container {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.chat-container {
+  width: 25%;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #ddd;
+}
+
+.knowledge-base-selector {
+  padding: 10px;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #ddd;
+  display: flex;
+  align-items: center;
+}
+
+.knowledge-base-selector label {
+  margin-right: 10px;
+  font-weight: bold;
+  font-size: 0.9em;
+}
+
+.knowledge-base-selector input {
+  flex-grow: 1;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.welcome-message {
+  padding: 15px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  margin-bottom: 15px;
+}
+
+.welcome-message h3 {
+  margin-top: 0;
+  color: #333;
+}
+
+.welcome-message p {
+  color: #555;
+  margin-bottom: 0;
+}
+
+.message {
+  font-size: 0.9rem;
+  padding: 10px;
+  border-radius: 8px;
+  max-width: 90%;
+}
+
+.message.user {
+  align-self: flex-end;
+  background-color: #0084ff;
+  color: white;
+}
+
+.message.bot {
+  align-self: flex-start;
+  background-color: #f1f0f0;
+  color: #333;
+}
+
+.message-content {
+  word-wrap: break-word;
+}
+
+.chunks {
+  margin-top: 10px;
+  font-size: 0.9em;
+}
+
+.chunks-header {
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.chunk {
+  padding: 8px;
+  background-color: rgba(0, 0, 0, 0.05);
+  border-radius: 5px;
+  margin-bottom: 5px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  border-left: 3px solid #0084ff;
+}
+
+.chunk:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.chunk-text {
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chunk-source {
+  font-size: 0.8em;
+  opacity: 0.8;
+}
+
+.chat-input {
+  display: flex;
+  padding: 10px;
+  border-top: 1px solid #ddd;
+}
+
+.chat-input input{
+  font-size: 0.9rem;
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 20px;
+  margin-right: 10px;
+}
+
+.chat-input button {
+  padding: 10px 15px;
+  background-color: #0084ff;
+  color: white;
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+}
+
+.pdf-container {
+  width: 75%;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  overflow: hidden;
+}
+
+.pdf-controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 15px;
+}
+
+.pdf-controls button {
+  padding: 5px 10px;
+  background-color: #f1f0f0;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.pdf-controls button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.zoom-controls {
+  display: flex;
+  align-items: center;
+  margin-left: 20px;
+}
+
+.zoom-controls button {
+  padding: 2px 8px;
+  font-size: 16px;
+  margin: 0 5px;
+}
+
+.zoom-controls span {
+  min-width: 60px;
+  text-align: center;
+}
+
+.warning-message {
+  margin: 0 auto 15px auto;
+  padding: 10px 15px;
+  background-color: #fff3cd;
+  color: #856404;
+  border-radius: 5px;
+  font-size: 0.9em;
+  text-align: center;
+  max-width: 90%;
+  border: 1px solid #ffeeba;
+}
+
+.pdf-viewer {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  background-color: #f5f5f5;
+  padding: 20px;
+  border-radius: 5px;
+}
+
+.pdf-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  background-color: #f9f9fa;
+  border-radius: 5px;
+  font-size: 1.1em;
+  color: #555;
+}
+
+.pdf-loading-indicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 200px;
+  font-style: italic;
+  color: #666;
+}
+
+.page-loading-indicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100px;
+  font-style: italic;
+  color: #666;
+}
+
+.sample-pdf-notice {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background-color: rgba(220, 53, 69, 0.8);
+  color: white;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 0.8em;
+  z-index: 1000;
+}
+
+.react-pdf__Document {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.react-pdf__Page {
+  margin-bottom: 15px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+  background-color: white;
+}
+
+.react-pdf__Page__canvas {
+  display: block;
+}
+
+.no-pdf {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  background-color: #f9f9f9;
+  color: #777;
+  border-radius: 5px;
+  text-align: center;
+  padding: 20px;
+}
+
+.no-pdf h3 {
+  margin-top: 0;
+  color: #333;
+}
+
+.error-message {
+  margin-top: 15px;
+  color: #d9534f;
+  font-weight: bold;
+  padding: 10px;
+  background-color: #f8d7da;
+  border-radius: 5px;
+  max-width: 80%;
+  text-align: center;
+}
+
+.loading {
+  align-self: center;
+  color: #777;
+  font-style: italic;
+  margin: 10px 0;
+}
+
+.highlight-overlay {
+  position: absolute;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+  z-index: 10;
+  pointer-events: none;
+}
+
+.debug-marker {
+  border-radius: 50%;
+  z-index: 1001;
+}
+
+.debug-button {
+  margin-left: 15px;
+  padding: 5px 10px;
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 0.8em;
+}
+
+.debug-button:hover {
+  background-color: #5a6268;
+}
+
+.view-chunk-button {
+  margin-left: 15px;
+  padding: 5px 10px;
+  background-color: #4a90e2;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 0.9em;
+}
+
+.view-chunk-button:hover {
+  background-color: #3a80d2;
+}
+
+.debug-overlay {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 20px;
+  border-radius: 8px;
+  font-size: 0.9em;
+  width: 80%;
+  max-width: 800px;
+  max-height: 80%;
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+.debug-overlay h4 {
+  margin-top: 0;
+  color: #ffcc00;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  padding-bottom: 10px;
+  margin-bottom: 15px;
+}
+
+.debug-section {
+  margin-bottom: 15px;
+}
+
+.debug-section p {
+  margin: 5px 0;
+}
+
+.debug-section strong {
+  color: #ffcc00;
+}
+
+.debug-buttons {
+  display: flex;
+  justify-content: center;
+  margin-top: 15px;
+}
+
+.close-debug-button {
+  padding: 8px 20px;
+  background-color: #ffcc00;
+  color: #000000;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.close-debug-button:hover {
+  background-color: #ffd700;
+}
+
+/* Full Chunk Text Modal */
+.full-chunk-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.full-chunk-content {
+  background-color: white;
+  width: 80%;
+  max-width: 800px;
+  max-height: 80%;
+  border-radius: 8px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.full-chunk-content h3 {
+  margin-top: 0;
+  color: #333;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 10px;
+}
+
+.full-chunk-text {
+  flex: 1;
+  overflow-y: auto;
+  background-color: #f5f5f5;
+  border-radius: 4px;
+  padding: 15px;
+  margin: 10px 0;
+  white-space: pre-wrap;
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #333;
+  border: 1px solid #ddd;
+  max-height: 400px;
+}
+
+.full-chunk-close {
+  align-self: center;
+  padding: 8px 20px;
+  background-color: #555;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  margin-top: 15px;
+}
+
+.full-chunk-close:hover {
+  background-color: #333;
+}
+
+/* Landing page styles */
+.landing-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding: 40px 20px;
+  background-color: #f8f9fa;
+  font-family: Arial, sans-serif;
+}
+
+.landing-header {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.landing-header h1 {
+  font-size: 2.5rem;
+  color: #333;
+  margin-bottom: 10px;
+}
+
+.landing-header p {
+  font-size: 1.2rem;
+  color: #666;
+}
+
+.company-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 30px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.company-card {
+  background-color: white;
+  border-radius: 10px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.company-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+}
+
+.logo-container {
+  width: 100px;
+  height: 100px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.logo-container img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.company-name {
+  font-size: 1.2rem;
+  font-weight: bold;
+  color: #333;
+  text-align: center;
+}
+
+.landing-footer {
+  margin-top: auto;
+  text-align: center;
+  padding-top: 40px;
+  color: #777;
+}
+
+/* Back button for chatbot page */
+.company-header {
+  padding: 10px;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #ddd;
+}
+
+.back-button {
+  padding: 8px 15px;
+  background-color: #f1f1f1;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9em;
+  color: #333;
+  transition: background-color 0.2s;
+}
+
+.back-button:hover {
+  background-color: #e5e5e5;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .company-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .company-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Password screen styles */
+.password-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  background-color: #f8f9fa;
+}
+
+.password-box {
+  background-color: white;
+  padding: 30px;
+  border-radius: 10px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  width: 90%;
+  max-width: 400px;
+  text-align: center;
+}
+
+.password-box h2 {
+  margin-top: 0;
+  color: #333;
+  margin-bottom: 10px;
+}
+
+.password-box p {
+  color: #666;
+  margin-bottom: 20px;
+}
+
+.password-input {
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 15px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 16px;
+  box-sizing: border-box;
+}
+
+.password-button {
+  width: 100%;
+  padding: 12px;
+  background-color: #0084ff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.password-button:hover {
+  background-color: #0066cc;
+}
+
+.password-error {
+  color: #dc3545;
+  margin-top: 15px;
+  font-size: 14px;
+}
+
+/* Header buttons layout */
+.header-buttons {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.logout-button {
+  padding: 8px 15px;
+  background-color: #f8f9fa;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9em;
+  color: #dc3545;
+  transition: background-color 0.2s;
+}
+
+.logout-button:hover {
+  background-color: #f1f1f1;
+}
+
+/* Document uploader styles */
+.uploader-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.uploader-header {
+  margin-bottom: 30px;
+  text-align: center;
+}
+
+.uploader-header h1 {
+  margin-bottom: 10px;
+  color: #333;
+  font-size: 2.2rem;
+}
+
+.uploader-header p {
+  color: #666;
+  font-size: 1.2rem;
+}
+
+.uploader-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.file-drop-area {
+  border: 2px dashed #ccc;
+  border-radius: 10px;
+  padding: 40px;
+  text-align: center;
+  background-color: #f9f9f9;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.file-drop-area:hover {
+  border-color: #0084ff;
+  background-color: #f0f8ff;
+}
+
+.drop-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+  color: #555;
+}
+
+.drop-message svg {
+  color: #0084ff;
+}
+
+.drop-message p {
+  font-size: 1.1rem;
+}
+
+.file-list {
+  background-color: #fff;
+  border-radius: 10px;
+  padding: 20px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.file-list h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #333;
+}
+
+.file-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  border-bottom: 1px solid #eee;
+}
+
+.file-item:last-child {
+  border-bottom: none;
+}
+
+.file-name {
+  flex: 1;
+  font-weight: 500;
+}
+
+.file-size {
+  margin: 0 15px;
+  color: #888;
+  font-size: 0.9rem;
+}
+
+.remove-file-btn {
+  background: none;
+  border: none;
+  color: #ff4d4f;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0 10px;
+}
+
+.remove-file-btn:hover {
+  color: #ff7875;
+}
+
+.upload-btn {
+  margin-top: 20px;
+  padding: 12px;
+  background-color: #0084ff;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  width: 100%;
+}
+
+.upload-btn:hover {
+  background-color: #0077e6;
+}
+
+.upload-btn:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
+.upload-progress {
+  margin-top: 20px;
+}
+
+.progress-status {
+  margin-bottom: 10px;
+  color: #333;
+  font-size: 0.95rem;
+}
+
+.progress-bar-container {
+  height: 10px;
+  background-color: #f0f0f0;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background-color: #0084ff;
+  transition: width 0.3s ease;
+}
+
+.error-message {
+  padding: 10px 15px;
+  background-color: #fff2f0;
+  border: 1px solid #ffccc7;
+  border-radius: 5px;
+  color: #f5222d;
+}
+
+/* Update chat header for the new design */
+.chat-header {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #ddd;
+}
+
+.back-button {
+  padding: 8px 15px;
+  background-color: #f1f1f1;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.2s;
+}
+
+.back-button:hover {
+  background-color: #e0e0e0;
+}
+
+.chunk-metadata {
+  margin-top: 8px;
+  font-size: 0.8em;
+}
+
+.chunk-metadata details {
+  background-color: rgba(0, 0, 0, 0.02);
+  border-radius: 4px;
+  padding: 4px;
+}
+
+.chunk-metadata summary {
+  cursor: pointer;
+  color: #666;
+  font-weight: 500;
+}
+
+.chunk-metadata pre {
+  margin: 8px 0 0 0;
+  padding: 8px;
+  background-color: rgba(0, 0, 0, 0.03);
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 0.75em;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.chunk-heading {
+  font-size: 0.85em;
+  color: #666;
+  margin-top: 4px;
+}
+
+.metadata-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.metadata-section {
+  background-color: rgba(0, 0, 0, 0.02);
+  border-radius: 4px;
+  padding: 8px;
+}
+
+.metadata-section strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #333;
+  font-size: 0.9em;
+}
+
+.metadata-section pre {
+  margin: 0;
+  padding: 8px;
+  background-color: rgba(0, 0, 0, 0.03);
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 0.75em;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+/* === Set Selector Styles === */
+
+.set-selector-container {
+  padding: 30px;
+  max-width: 900px;
+  margin: 40px auto;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.set-selector-header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.set-selector-header h1 {
+  margin-bottom: 10px;
+}
+
+.set-selector-header p {
+  color: #666;
+}
+
+.set-selector-content {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.set-selector-divider {
+  border: none;
+  border-top: 1px solid #eee;
+  margin: 10px 0;
+}
+
+/* --- Existing Sets Section --- */
+.existing-sets-section h2 {
+  margin-bottom: 15px;
+  color: #333;
+}
+
+.set-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+/* Style for each list item */
+.set-list-item {
+  display: flex;             /* Use flexbox */
+  justify-content: space-between; /* Push name and buttons apart */
+  align-items: center;      /* Vertically align items */
+  padding: 12px 8px;        /* Add some padding */
+  border-bottom: 1px solid #eee; /* Separator line */
+}
+
+.set-list-item:last-child {
+  border-bottom: none;       /* No line for the last item */
+}
+
+.set-list-item span {
+  font-weight: 500;
+  color: #444;
+}
+
+/* Container for the Select/Delete buttons */
+.set-item-buttons {
+  display: flex; /* Arrange buttons horizontally */
+  gap: 10px;     /* Space between buttons */
+}
+
+/* General button style within this section */
+.existing-sets-section button {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9em;
+  transition: background-color 0.2s, opacity 0.2s;
+}
+
+/* Specific style for Select button */
+.set-item-buttons button:not(.delete-button) {
+  background-color: #007bff;
+  color: white;
+}
+
+.set-item-buttons button:not(.delete-button):hover {
+  background-color: #0056b3;
+}
+
+/* Specific style for Delete button */
+.delete-button {
+  background-color: #dc3545 !important; /* Use !important if needed to override general */
+  color: white !important;
+}
+
+.delete-button:hover {
+  background-color: #c82333 !important;
+}
+
+/* Disabled state for ALL buttons in this section */
+.existing-sets-section button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background-color: #6c757d !important; /* Grey background when disabled */
+}
+
+/* --- Create Set Section --- */
+.create-set-section h2 {
+  margin-bottom: 15px;
+  color: #333;
+}
+
+.create-set-form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.set-name-input {
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+/* Smaller drop area */
+.file-drop-area-small {
+  border: 2px dashed #ccc;
+  border-radius: 6px;
+  padding: 20px;
+  text-align: center;
+  background-color: #f9f9f9;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.file-drop-area-small:hover {
+  border-color: #007bff;
+}
+
+.drop-message-small {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: #555;
+}
+
+.drop-message-small svg {
+  color: #007bff;
+}
+
+/* Smaller file list */
+.file-list-small ul {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 0 0;
+}
+
+.file-item-small {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.9em;
+  padding: 5px 0;
+}
+
+.remove-file-btn {
+  background: none;
+  border: none;
+  color: #dc3545;
+  font-size: 1.1em;
+  cursor: pointer;
+  margin-left: 10px;
+}
+
+.create-set-btn {
+  padding: 10px 15px;
+  background-color: #28a745;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background-color 0.2s;
+}
+
+.create-set-btn:hover {
+  background-color: #218838;
+}
+
+.create-set-btn:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+/* Status and Error messages */
+.status-message, .error-message {
+  padding: 10px;
+  border-radius: 4px;
+  margin-top: 10px;
+  font-size: 0.9em;
+  text-align: center;
+}
+
+.status-message.success {
+  background-color: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.error-message {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.error-message.create-error {
+  /* Specific styles if needed */
+}
+
+.error-message.delete-error {
+  /* Specific styles if needed */
+  margin-bottom: 15px; /* Add space below delete error */
+}
+
+
+/* === Chatbot Component Styles === */
+/* ... (styles for chat, pdf viewer, etc. remain) ... */
+
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  /* ... */
+}
+
+@media (max-width: 480px) {
+  /* ... */
+}
+
+/* ... (rest of the styles) ... */

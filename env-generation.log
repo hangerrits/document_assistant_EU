@@ -1,0 +1,10 @@
+🔄 Starting environment variable generation for React...
+📂 Looking for backend .env file at: /Users/han/Documents/GitHub/document_assistant/.env
+📝 Will create React .env.local file at: /Users/han/Documents/GitHub/document_assistant/.env.local
+📖 Reading backend .env file...
+✅ Successfully read .env file
+🔍 Processing environment variables...
+✅ Successfully generated React environment variables at .env.local
+📊 Variables processed:
+   🔹 BACKEND_URL → REACT_APP_BACKEND_URL = http://localhost:8000
+🚀 Your React app is now configured to use these environment variables

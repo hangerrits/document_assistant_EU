@@ -1,0 +1,42 @@
+# render.yaml - Configuration for Render.com
+
+services:
+  # =============================
+  # Backend Service (Python/FastAPI)
+  # =============================
+  - type: web
+    name: document-assistant-backend
+    env: python
+    plan: free # Or your desired plan
+    buildCommand: "pip install --upgrade pip && pip install -r requirements.txt"
+    startCommand: "gunicorn -w 1 -k uvicorn.workers.UvicornWorker api:app --bind 0.0.0.0:$PORT" # Use 1 worker for free tier
+    healthCheckPath: /health # Add health check path
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11
+      - key: NEBIUS_API_KEY # Use the Nebius key now
+        fromSecret: true
+      # Defaults (can be overridden in Render UI)
+      - key: EMBED_MODEL_NAME
+        value: "intfloat/e5-mistral-7b-instruct"
+      - key: LLM_MODEL_NAME
+        value: "mistralai/Mistral-Nemo-Instruct-2407"
+      - key: RAG_NUM_CANDIDATES
+        value: 30
+      - key: DOCUMENT_SET_DIR
+        value: /var/data/document_sets # Persistent disk mount point
+      - key: BACKEND_URL # Backend needs its own external URL for generating PDF links
+        fromService:
+          type: web
+          name: document-assistant-backend
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: FRONTEND_URL # Allow CORS from anywhere or specific domain (set manually in Render UI)
+        value: "*" # Default to allow all, CHANGE THIS in Render UI for security
+    # Persistent Disk for ChromaDB
+    disks:
+      - name: document-data
+        mountPath: /var/data
+        sizeGB: 1
+
+# Optional: Define pre-deploy steps if needed
+# preDeployCommand: "echo 'Running pre-deploy steps...'" 

@@ -1,0 +1,25 @@
+fastapi>=0.100.0
+numpy>=1.24.0
+openai>=1.12.0
+pydantic
+# scikit-learn>=1.3.0 # Removed - Unused
+uvicorn[standard]>=0.23.2
+docling>=0.4.0
+gunicorn
+python-multipart>=0.0.9
+# langchain>=0.1.11 # Removed - Unused
+# langchain-openai>=0.0.5 # Removed - Unused
+python-dotenv>=1.0.0
+llama-index>=0.10.38
+# llama-index-readers-file>=0.1.12 # Removed - Unused
+llama-index-readers-docling>=0.1.7
+llama-index-vector-stores-chroma>=0.1.6
+# llama-index-llms-openai>=0.1.15 # Removed - Unused
+llama-index-node-parser-docling>=0.1.3
+llama-index-llms-openai-like>=0.1.3
+# llama-index-embeddings-adapter>=0.1.0
+# llama-index-embeddings-huggingface-api>=0.1.3 # Removed - Unused
+# llama-index-embeddings-openai>=0.1.9 # Removed - Unused
+chromadb>=0.4.24
+transformers>=4.30.0
+requests
