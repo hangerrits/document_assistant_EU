@@ -61,7 +61,7 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # Configuration settings
-EMBED_MODEL_NAME = os.getenv("EMBED_MODEL_NAME", "intfloat/e5-mistral-7b-instruct") # Nebius embedding model
+EMBED_MODEL_NAME = os.getenv("EMBED_MODEL_NAME", "BAAI/bge-en-icl") # Changed default
 # HF_EMBEDDING_ENDPOINT_URL = os.getenv("HF_EMBEDDING_ENDPOINT_URL") # No longer needed
 
 LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME", "mistralai/Mistral-Nemo-Instruct-2407") # Identifier for the model
@@ -438,7 +438,6 @@ def process_and_index_files(sanitized_set_name: str, file_paths: List[str]) -> b
         # --- Use the tokenizer associated with the embedding model ---
         tokenizer_name = EMBED_MODEL_NAME # Use the same name as the embedding model
         logger.info(f"Attempting to initialize tokenizer '{tokenizer_name}' for HybridChunker.")
-        # --- End change ---
         try:
             # Attempt to download and load the specified tokenizer
             tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
