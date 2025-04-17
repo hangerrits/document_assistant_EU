@@ -664,21 +664,24 @@ async def create_document_set(name: str = Form(...), files: List[UploadFile] = F
     """
     Create a new document set by uploading files and processing them immediately.
     """
-    if not name: raise HTTPException(status_code=400, detail="Set name cannot be empty.")
-    if not files: raise HTTPException(status_code=400, detail="At least one file must be uploaded.")
-
-    sanitized_name = sanitize_name(name)
-    set_base_path = get_set_base_path(sanitized_name)
-    chroma_path = get_set_chroma_path(sanitized_name)
-
-    if os.path.exists(set_base_path) and os.path.exists(chroma_path) and os.listdir(chroma_path):
-        logger.warning(f"Attempt to create existing and indexed set '{sanitized_name}'.")
-        raise HTTPException(status_code=409, detail=f"Document set '{sanitized_name}' already exists and appears indexed.")
-    elif os.path.exists(set_base_path):
-         logger.warning(f"Directory for set '{sanitized_name}' exists but seems incomplete/unindexed. Proceeding to create/overwrite.")
-         # Optionally clean up if needed: shutil.rmtree(set_base_path); time.sleep(0.1)
+    # We define sanitized_name within the try block to handle potential early errors more gracefully
+    sanitized_name = None # Initialize to None
 
     try:
+        if not name: raise HTTPException(status_code=400, detail="Set name cannot be empty.")
+        if not files: raise HTTPException(status_code=400, detail="At least one file must be uploaded.")
+
+        sanitized_name = sanitize_name(name) # Assign sanitized_name here
+        set_base_path = get_set_base_path(sanitized_name)
+        chroma_path = get_set_chroma_path(sanitized_name)
+
+        if os.path.exists(set_base_path) and os.path.exists(chroma_path) and os.listdir(chroma_path):
+            logger.warning(f"Attempt to create existing and indexed set '{sanitized_name}'.")
+            raise HTTPException(status_code=409, detail=f"Document set '{sanitized_name}' already exists and appears indexed.")
+        elif os.path.exists(set_base_path):
+             logger.warning(f"Directory for set '{sanitized_name}' exists but seems incomplete/unindexed. Proceeding to create/overwrite.")
+             # Optionally clean up if needed: shutil.rmtree(set_base_path); time.sleep(0.1)
+
         saved_file_paths = store_uploaded_files(sanitized_name, files)
         if not saved_file_paths:
             raise HTTPException(status_code=400, detail="No valid PDF files were uploaded or saved.")
@@ -706,12 +709,32 @@ async def create_document_set(name: str = Form(...), files: List[UploadFile] = F
         )
 
     except HTTPException:
-        raise # Re-raise HTTP exceptions
+        raise # Re-raise expected HTTP exceptions cleanly
+
     except Exception as e:
-        logger.error(f"Unexpected error creating document set '{sanitized_name}': {e}", exc_info=True)
-        # Attempt cleanup? Maybe remove set_base_path if partially created
-        # if os.path.exists(set_base_path): shutil.rmtree(set_base_path)
-        raise HTTPException(status_code=500, detail=f"Internal server error creating set '{sanitized_name}': {e}")
+        # --- Robust final exception handler ---
+        # Determine the identifier to use in logs/messages
+        set_identifier = name if 'name' in locals() and name else "unknown"
+        log_identifier = sanitized_name if sanitized_name else set_identifier
+
+        logger.error(f"Unexpected error creating document set '{log_identifier}': {e}", exc_info=True)
+
+        # Attempt cleanup? Maybe remove set_base_path if partially created and sanitized_name exists
+        # if sanitized_name and os.path.exists(get_set_base_path(sanitized_name)):
+        #    try:
+        #        shutil.rmtree(get_set_base_path(sanitized_name))
+        #        logger.info(f"Attempted cleanup of partially created set '{sanitized_name}'.")
+        #    except Exception as cleanup_err:
+        #        logger.error(f"Error during cleanup attempt for set '{sanitized_name}': {cleanup_err}", exc_info=True)
+
+
+        # Construct detail message safely, indicating original and sanitized name if different
+        detail_message = f"Internal server error creating set '{set_identifier}': {e}"
+        if sanitized_name and sanitized_name != set_identifier:
+            detail_message = f"Internal server error creating set '{set_identifier}' (sanitized as '{sanitized_name}'): {e}"
+
+        raise HTTPException(status_code=500, detail=detail_message)
+        # --- End robust handler ---
 
 @app.get("/document_sets", response_model=DocumentSetListResponse)
 async def list_document_sets():
