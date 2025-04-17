@@ -388,7 +388,7 @@ def load_set_index(sanitized_set_name: str) -> Tuple[VectorStoreIndex, ChromaVec
 
 def store_uploaded_files(sanitized_set_name: str, files: List[UploadFile]) -> List[str]:
     """Stores uploaded files in the set's documents directory."""
-    docs_path = get_set_docs_path(sanitized_set_name)
+    docs_path = get_set_docs_path(sanitized_name)
     os.makedirs(docs_path, exist_ok=True)
     saved_file_paths = []
     for file in files:
@@ -435,21 +435,29 @@ def process_and_index_files(sanitized_set_name: str, file_paths: List[str]) -> b
 
     try:
         tokenizer = None
+        # --- Use the tokenizer associated with the embedding model ---
+        tokenizer_name = EMBED_MODEL_NAME # Use the same name as the embedding model
+        logger.info(f"Attempting to initialize tokenizer '{tokenizer_name}' for HybridChunker.")
+        # --- End change ---
         try:
-            # Use a generic tokenizer as we can't guarantee access to the exact one from the HF API endpoint
-            generic_tokenizer_name = "bert-base-uncased" # A common fallback
-            logger.warning(f"Using generic tokenizer '{generic_tokenizer_name}' for HybridChunker as embedding model is API-based.")
-            tokenizer = AutoTokenizer.from_pretrained(generic_tokenizer_name)
+            # Attempt to download and load the specified tokenizer
+            tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+            logger.info(f"Successfully initialized tokenizer '{tokenizer_name}'.")
         except Exception as e_tok:
-             logger.warning(f"Failed to init generic tokenizer '{generic_tokenizer_name}': {e_tok}. Falling back to HybridChunker default tokenizer.")
-             tokenizer = None # HybridChunker will use its default
+             # Log error if specific tokenizer fails, fallback is removed for now
+             logger.error(f"Failed to initialize specified tokenizer '{tokenizer_name}': {e_tok}. HybridChunker might use its default or fail if tokenizer is strictly required.", exc_info=True)
+             tokenizer = None # Let HybridChunker handle potential missing tokenizer based on its implementation
 
+        # Initialize HybridChunker - pass the loaded tokenizer if successful
         if tokenizer:
             hybrid_chunker = HybridChunker(tokenizer=tokenizer, max_tokens=DOCLING_CHUNK_SIZE, merge_peers=True)
-            logger.info(f"Initialized HybridChunker with generic tokenizer '{generic_tokenizer_name}' and max_tokens={DOCLING_CHUNK_SIZE}")
+            logger.info(f"Initialized HybridChunker with tokenizer '{tokenizer_name}' and max_tokens={DOCLING_CHUNK_SIZE}")
         else:
+            # If tokenizer failed to load, initialize HybridChunker without one.
+            # It might have internal defaults or require a tokenizer. Check HybridChunker docs if issues arise.
             hybrid_chunker = HybridChunker(max_tokens=DOCLING_CHUNK_SIZE, merge_peers=True)
-            logger.info(f"Initialized HybridChunker with DEFAULT tokenizer and max_tokens={DOCLING_CHUNK_SIZE}")
+            logger.warning(f"Initialized HybridChunker without a specific tokenizer (using defaults) due to previous error. max_tokens={DOCLING_CHUNK_SIZE}")
+
 
         storage_context = get_chroma_storage_context(sanitized_set_name)
         all_processed_nodes: List[BaseNode] = []
