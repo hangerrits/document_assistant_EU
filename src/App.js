@@ -11,7 +11,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/$
 console.log(`Using pdf.js version: ${pdfjs.version}`);
 
 function App() {
-  const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
+  const backendUrl = process.env.REACT_APP_BACKEND_URL;
   console.log('Backend URL in App component:', backendUrl);
   
   // State to manage which view is shown: 'selector' or 'chatbot'
