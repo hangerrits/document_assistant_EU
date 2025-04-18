@@ -1160,10 +1160,8 @@
   margin-bottom: 15px; /* Add space below delete error */
 }
 
-
 /* === Chatbot Component Styles === */
 /* ... (styles for chat, pdf viewer, etc. remain) ... */
-
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
@@ -1175,3 +1173,47 @@
 }
 
 /* ... (rest of the styles) ... */
+
+/* --- NEW Style for Update Cancel Button --- */
+.cancel-update-btn {
+  padding: 8px 15px;
+  font-size: 0.9em;
+  background-color: #dc3545; /* Red like delete */
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.cancel-update-btn:hover {
+  background-color: #c82333; /* Darker red on hover */
+}
+
+.cancel-update-btn:disabled {
+  background-color: #f8d7da; /* Lighter red when disabled */
+  color: #721c24;
+  border-color: #f5c6cb;
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+/* --- END NEW Style --- */
+
+.existing-sets-section button:disabled {
+  background-color: #e9ecef;
+  color: #6c757d;
+  border-bottom: 1px solid #eee;
+}
+
+.update-controls {
+  display: flex;
+  justify-content: space-between; /* Pushes buttons apart */
+  align-items: center;
+  margin-top: 20px; /* Add some space above buttons */
+  padding-top: 15px; /* Add padding */
+  border-top: 1px solid #eee; /* Separator line */
+}
+
+.new-tag {
+  font-size: 0.8em;
+}

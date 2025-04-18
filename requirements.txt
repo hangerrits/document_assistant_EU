@@ -24,3 +24,11 @@ chromadb>=0.4.24
 transformers>=4.30.0
 requests
 sentencepiece
+# Dependencies for additional docling formats
+pypdfium2
+python-docx
+python-pptx
+beautifulsoup4
+lxml
+Pillow
+reportlab

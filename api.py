@@ -17,6 +17,8 @@ import asyncio
 from typing import List, Dict, Any, Optional, Tuple
 from contextlib import asynccontextmanager
 from datetime import datetime
+import tempfile
+import glob # Make sure this is imported
 
 from fastapi import FastAPI, HTTPException, Request, UploadFile, Form, File, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,7 +28,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 
 # Import llama-index components
-from llama_index.core import VectorStoreIndex, StorageContext, load_index_from_storage
+from llama_index.core import VectorStoreIndex, StorageContext, load_index_from_storage, PromptTemplate
 from llama_index.core.node_parser import SimpleNodeParser, NodeParser
 from llama_index.core.storage.docstore import SimpleDocumentStore
 from llama_index.core.storage.index_store import SimpleIndexStore
@@ -48,7 +50,10 @@ import numpy as np
 from docling.chunking import HybridChunker
 from transformers import AutoTokenizer
 from llama_index.core.schema import BaseNode, Document, TextNode
-from docling.document_converter import DocumentConverter
+from docling.document_converter import DocumentConverter # Corrected import for DocumentConverter
+
+# Import custom file converter module
+from file_converter import convert_file_for_upload, is_pdf_file, get_base_filename_no_ext # New import for local helpers
 
 # Set up logging
 logging.basicConfig(
@@ -387,38 +392,97 @@ def load_set_index(sanitized_set_name: str) -> Tuple[VectorStoreIndex, ChromaVec
         raise HTTPException(status_code=500, detail=f"Failed to load index for set '{sanitized_set_name}': {e}")
 
 def store_uploaded_files(sanitized_set_name: str, files: List[UploadFile]) -> List[str]:
-    """Stores uploaded files in the set's documents directory."""
+    """
+    Stores uploaded files in the set's documents directory.
+    Converts non-PDF files to PDF format before saving the final version.
+    Ensures final filenames do not have the 'temp_' prefix.
+    """
     docs_path = get_set_docs_path(sanitized_set_name)
     os.makedirs(docs_path, exist_ok=True)
-    saved_file_paths = []
+    final_file_paths = [] # Changed variable name for clarity
+    conversion_stats = {"converted": 0, "already_pdf": 0, "failed": 0}
+
     for file in files:
-        if not file.filename or not file.filename.lower().endswith('.pdf'):
-            logger.warning(f"Skipping non-PDF or invalid filename: {file.filename}")
+        original_filename = file.filename
+        if not original_filename:
+            logger.warning(f"Skipping file with no filename.")
             continue
-        file_path = os.path.join(docs_path, file.filename)
+
+        temp_file_path = os.path.join(docs_path, f"temp_{original_filename}")
+        converted_pdf_temp_path: Optional[str] = None # To store path from converter
+
         try:
-            with open(file_path, "wb") as buffer:
+            # 1. Save original to temp location
+            with open(temp_file_path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
-            if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
-                 logger.error(f"Failed to save file or file is empty: {file_path}")
-                 continue
-            with open(file_path, "rb") as f:
-                if not f.read(1024).startswith(b"%PDF-"):
-                    logger.error(f"Invalid PDF format detected for {file_path}, skipping.")
-                    os.remove(file_path)
-                    continue
-            logger.info(f"Successfully saved PDF file: {file_path}")
-            saved_file_paths.append(file_path)
+            if not os.path.exists(temp_file_path) or os.path.getsize(temp_file_path) == 0:
+                logger.error(f"Failed to save file to temp location or file is empty: {temp_file_path}")
+                conversion_stats["failed"] += 1
+                continue
+
+            # 2. Check ORIGINAL filename extension
+            is_original_pdf = original_filename.lower().endswith('.pdf')
+
+            if is_original_pdf:
+                # Already PDF: Define final path and move temp file to it
+                final_filename = original_filename
+                final_file_path = os.path.join(docs_path, final_filename)
+                logger.info(f"Original file '{original_filename}' is PDF. Moving temp file to final path.")
+                shutil.move(temp_file_path, final_file_path)
+                final_file_paths.append(final_file_path)
+                conversion_stats["already_pdf"] += 1
+                temp_file_path = None # Mark temp file as handled
+
+            else:
+                # Not PDF: Attempt conversion
+                logger.info(f"Original file '{original_filename}' is not PDF. Attempting conversion.")
+                # Pass the temp file path to the converter
+                success, converted_pdf_temp_path, _ = convert_file_for_upload(temp_file_path)
+
+                if success and converted_pdf_temp_path:
+                    # Conversion successful: Determine final filename and move converted temp file
+                    original_base_no_ext = get_base_filename_no_ext(original_filename)
+                    final_filename = f"{original_base_no_ext}.pdf" # Final name based on original
+                    final_file_path = os.path.join(docs_path, final_filename)
+                    logger.info(f"Conversion successful. Moving converted temp file '{converted_pdf_temp_path}' to final path '{final_file_path}'.")
+                    shutil.move(converted_pdf_temp_path, final_file_path)
+                    final_file_paths.append(final_file_path)
+                    conversion_stats["converted"] += 1
+                    # The temp dir containing converted_pdf_temp_path should be cleaned up by converter or here
+                    # Let's add explicit cleanup of the *directory* where the converted temp PDF was stored
+                    temp_conv_dir = os.path.dirname(converted_pdf_temp_path)
+                    if temp_conv_dir and os.path.exists(temp_conv_dir) and tempfile.gettempdir() in temp_conv_dir:
+                         logger.debug(f"Cleaning up conversion temp directory: {temp_conv_dir}")
+                         shutil.rmtree(temp_conv_dir, ignore_errors=True)
+
+                else:
+                    # Conversion failed
+                    logger.error(f"Failed to convert non-PDF file: {original_filename}")
+                    conversion_stats["failed"] += 1
+                    # Temp original file will be cleaned up in finally block
+
         except Exception as e:
-            logger.error(f"Error saving file {file.filename}: {e}", exc_info=True)
-            if os.path.exists(file_path): os.remove(file_path)
+            logger.error(f"Error processing file {original_filename}: {e}", exc_info=True)
+            conversion_stats["failed"] += 1
         finally:
-             # According to FastAPI docs, UploadFile should be closed,
-             # usually handled automatically with 'async with' or if context ends.
-             # Explicit close might be needed in complex scenarios, but usually okay.
-             # await file.close()
-             pass
-    return saved_file_paths
+            # 3. Cleanup: Remove original temp file if it still exists
+            if temp_file_path and os.path.exists(temp_file_path):
+                logger.debug(f"Cleaning up original temp file: {temp_file_path}")
+                os.remove(temp_file_path)
+            # Cleanup potential lingering conversion temp dir if an exception occurred after conversion but before move
+            if converted_pdf_temp_path:
+                temp_conv_dir = os.path.dirname(converted_pdf_temp_path)
+                if temp_conv_dir and os.path.exists(temp_conv_dir) and tempfile.gettempdir() in temp_conv_dir:
+                    logger.debug(f"Ensuring cleanup of conversion temp directory after potential error: {temp_conv_dir}")
+                    shutil.rmtree(temp_conv_dir, ignore_errors=True)
+
+
+    logger.info(f"File processing statistics for set '{sanitized_set_name}': "
+                f"{conversion_stats['converted']} files converted to PDF, "
+                f"{conversion_stats['already_pdf']} files already in PDF format, "
+                f"{conversion_stats['failed']} files failed processing.")
+
+    return final_file_paths # Return list of final paths
 
 def process_and_index_files(sanitized_set_name: str, file_paths: List[str]) -> bool:
     """Processes files using Docling Converter and HybridChunker, creates nodes manually, and indexes them."""
@@ -685,7 +749,7 @@ async def create_document_set(name: str = Form(...), files: List[UploadFile] = F
         # Pass the consistent variable name
         saved_file_paths = store_uploaded_files(sanitized_set_name, files)
         if not saved_file_paths:
-            raise HTTPException(status_code=400, detail="No valid PDF files were uploaded or saved.")
+            raise HTTPException(status_code=400, detail="No valid files were uploaded or saved.")
 
         loop = asyncio.get_running_loop()
         try:
@@ -800,208 +864,121 @@ async def delete_document_set(set_name: str):
         shutil.rmtree(set_base_path)
         logger.info(f"Successfully deleted document set directory: {set_base_path}")
         return {"message": f"Document set '{sanitized_name}' deleted successfully."}
-    except PermissionError as pe:
-         logger.error(f"Permission error deleting set '{sanitized_name}' at {set_base_path}: {pe}", exc_info=True)
-         raise HTTPException(status_code=500, detail=f"Permission denied when trying to delete set '{sanitized_name}'.")
     except Exception as e:
-        logger.error(f"Error deleting document set '{sanitized_name}' at {set_base_path}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to delete document set '{sanitized_name}': {e}")
+        logger.error(f"Error deleting document set '{sanitized_name}': {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to delete document set: {e}")
 
 @app.post("/rag", response_model=RagAnswerResponse)
-async def rag_query(request: RagQueryRequest):
-    """Query a specific document set using RAG."""
-
-    # <<< Check Models Availability >>>
-    if not Settings.embed_model or not Settings.llm:
-        logger.error("RAG query endpoint called but backend models are not available (check lifespan initialization).")
-        raise HTTPException(status_code=503, detail="Backend services (LLM/Embedding) are currently unavailable.")
-    # <<< End Check Models Availability >>>
-
+async def rag(request: RagQueryRequest):
+    """
+    Perform a RAG query against a specific document set.
+    Returns the answer and the source chunks used to generate it.
+    """
     sanitized_name = sanitize_name(request.set_name)
-    logger.info(f"Received RAG query for set '{sanitized_name}'. Question: '{request.question[:50]}...'")
+    logger.info(f"RAG Query for set '{sanitized_name}': {request.question}")
 
     try:
-        # Load index (will also check model availability internally)
+        # Load the index for the specified set
         index, vector_store = load_set_index(sanitized_name)
 
-        # Create query engine (uses Settings.llm implicitly)
+        # --- Define the Prompt Template Here ---
+        # This is where you customize the instructions given to the LLM.
+        # Modify the text within the triple quotes below.
+        # Use {context_str} where the retrieved document chunks should be inserted.
+        # Use {query_str} where the user's question should be inserted.
+        DEFAULT_TEXT_QA_PROMPT_TMPL = (
+            "Context information is below.\n"
+            "---------------------\n"
+            "{context_str}\n"
+            "---------------------\n"
+            "Given the context information and not prior knowledge, "
+            "answer the query concisely and factually. If the context does not contain the answer, state that you cannot answer based on the provided information.\n"
+            "Always answer in the same language as the query.\n"
+            "Query: {query_str}\n"
+            "Answer: "
+        )
+        qa_template = PromptTemplate(DEFAULT_TEXT_QA_PROMPT_TMPL)
+        # ------------------------------------
+
+        # Create a query engine with the loaded index and custom prompt
         query_engine = index.as_query_engine(
             similarity_top_k=RAG_NUM_CANDIDATES,
-            # embed_model=Settings.embed_model, # Not needed, uses Settings
-            # llm=Settings.llm, # Not needed, uses Settings
+            text_qa_template=qa_template, # Pass the custom template here
         )
 
-        logger.info(f"Executing query against set '{sanitized_name}' with top_k={RAG_NUM_CANDIDATES}...")
-        # Use asynchronous query execution
-        result = await query_engine.aquery(request.question)
-        answer = result.response or "Could not generate an answer based on the provided documents."
-        source_nodes_with_scores = result.source_nodes
-        logger.info(f"Retrieved {len(source_nodes_with_scores)} candidate nodes for set '{sanitized_name}'.")
+        # Execute the query
+        # --- Use await for async query ---
+        response = await query_engine.aquery(request.question)
+        # --- End change ---
 
-        if not source_nodes_with_scores and answer == "Could not generate an answer based on the provided documents.":
-            logger.warning(f"Query for set '{sanitized_name}' returned no answer and no source nodes.")
-            # Return the default message but with empty chunks
-            return RagAnswerResponse(answer=answer, chunks=[])
-        elif not source_nodes_with_scores:
-             logger.warning(f"Query for set '{sanitized_name}' returned an answer but found no source nodes. Answer: {answer[:50]}...")
-             # Still return the answer, but indicate no specific chunks supported it.
-             return RagAnswerResponse(answer=answer, chunks=[])
+        # Extract source nodes and their metadata
+        source_nodes = getattr(response, 'source_nodes', [])
 
-
-        # --- Calculate Answer Similarity (Asynchronous) ---
-        answer_embedding = None
-        if answer != "Could not generate an answer based on the provided documents.":
+        # Prepare the response chunks
+        chunks = []
+        for node in source_nodes:
              try:
-                 logger.debug("Generating embedding for the answer...")
-                 answer_embedding = await Settings.embed_model.aget_text_embedding(answer)
-                 logger.debug("Answer embedding generated.")
-             except Exception as ans_emb_err:
-                  logger.warning(f"Failed to generate embedding for the answer: {ans_emb_err}", exc_info=True)
-                  # Proceed without answer similarity if embedding fails
+                 metadata = getattr(node, 'metadata', {})
+                 node_text = getattr(node, 'text', '')
+                 filename = metadata.get('filename', 'unknown.pdf')
+                 page_no = metadata.get('page_no', 1)
+                 coord_origin = metadata.get('coord_origin', 'BOTTOMLEFT')
+                 bbox_dict = {}
+                 bbox_json_str = metadata.get('bbox_json', '{}')
+                 try:
+                     if bbox_json_str and bbox_json_str != '{}':
+                         bbox_dict = json.loads(bbox_json_str)
+                 except json.JSONDecodeError:
+                     logger.warning(f"Failed to parse bbox JSON: {bbox_json_str}")
+                 safe_filename = urllib.parse.quote(filename)
+                 base_url = BACKEND_URL.rstrip('/')
+                 pdf_url = f"{base_url}/document_sets/{sanitized_name}/documents/{safe_filename}"
+                 chunk = ChunkResponse(
+                     id=getattr(node, 'id_', f"node_{len(chunks)}"),
+                     text=node_text,
+                     pdfUrl=pdf_url,
+                     position=ChunkPosition(
+                         pageNumber=page_no,
+                         bbox=bbox_dict,
+                         coord_origin=coord_origin
+                     ),
+                     pageNumber=page_no,
+                     metadata=metadata
+                 )
+                 chunks.append(chunk)
+             except Exception as chunk_err:
+                 logger.error(f"Error processing source node: {chunk_err}", exc_info=True)
 
-        # --- Fetch Embeddings for Retrieved Nodes Directly from ChromaDB ---
-        node_id_to_embedding = {}
-        node_ids = [node.node_id for node in source_nodes_with_scores if node.node_id]
-        if node_ids and vector_store and hasattr(vector_store, 'client') and hasattr(vector_store, '_collection'):
-            try:
-                # Access Chroma client/collection safely
-                chroma_collection = getattr(vector_store, '_collection', None)
-                if not chroma_collection: raise ValueError("Vector store collection attribute not found or invalid.")
-
-                logger.debug(f"Retrieving embeddings directly from ChromaDB for {len(node_ids)} node IDs.")
-                embedding_results = chroma_collection.get(ids=node_ids, include=["embeddings"])
-
-                retrieved_ids = embedding_results.get('ids', [])
-                retrieved_embeddings = embedding_results.get('embeddings') # Can be None
-
-                if (retrieved_ids and retrieved_embeddings is not None and
-                    len(retrieved_ids) == len(retrieved_embeddings)):
-                     node_id_to_embedding = {id_val: emb for id_val, emb in zip(retrieved_ids, retrieved_embeddings) if emb is not None}
-                     logger.debug(f"Successfully retrieved {len(node_id_to_embedding)} embeddings from ChromaDB.")
-                else:
-                    logger.warning(f"Mismatch or missing data in ChromaDB embedding results. IDs: {len(retrieved_ids)}, Embeddings Found: {len(retrieved_embeddings) if retrieved_embeddings else 'None'}")
-
-            except Exception as e_chroma_get:
-                logger.error(f"Failed to retrieve embeddings directly from ChromaDB: {e_chroma_get}", exc_info=True)
-        else:
-            reason = "No node IDs" if not node_ids else "Vector store invalid" if not vector_store else "Client/Collection missing"
-            logger.warning(f"Could not retrieve node embeddings from ChromaDB: {reason}.")
-
-
-        processed_chunks = []
-        for node_with_score in source_nodes_with_scores:
-            node = node_with_score.node
-            metadata = node.metadata or {}
-            node_id = node.node_id or f"missing_id_{uuid.uuid4().hex[:4]}"
-            ans_sim = 0.0 # Default similarity
-
-            # --- Use Pre-fetched Embedding ---
-            node_embedding = node_id_to_embedding.get(node_id)
-            if node_embedding is None and node_id in node_ids: # Only warn if we expected it
-                logger.warning(f"Embedding not found in pre-fetched map for node {node_id}. Ans Sim will be 0.")
-
-            # Calculate answer similarity if possible
-            if node_embedding is not None and answer_embedding is not None:
-                try:
-                    ans_sim = cosine_similarity(answer_embedding, node_embedding)
-                except Exception as sim_error:
-                    logger.error(f"Error calculating cosine similarity for node {node_id}: {sim_error}", exc_info=True)
-
-            # Store scores back into the metadata (transiently for this request)
-            metadata['question_similarity'] = round(node_with_score.score or 0.0, 4)
-            metadata['answer_similarity'] = round(ans_sim, 4)
-            logger.debug(f"  Node: {node_id}, Q_Sim: {metadata['question_similarity']:.4f}, A_Sim: {metadata['answer_similarity']:.4f}")
-
-            # --- Create Chunk Response ---
-            filename = metadata.get("filename", "")
-            page_num = metadata.get("page_no", 1)
-            coord_origin = metadata.get("coord_origin", "BOTTOMLEFT")
-            bbox_json = metadata.get("bbox_json", "{}")
-            raw_bbox = {}
-            try:
-                raw_bbox = json.loads(bbox_json) if isinstance(bbox_json, str) and bbox_json.strip() else (bbox_json if isinstance(bbox_json, dict) else {})
-                if not isinstance(raw_bbox, dict): raw_bbox = {}
-            except json.JSONDecodeError:
-                 logger.warning(f"Failed to parse bbox_json for node {node_id}: {bbox_json}")
-                 raw_bbox = {}
-
-            validated_bbox: Optional[Dict[str, float]] = None
-            if raw_bbox:
-                temp_bbox = {}
-                for k, v in raw_bbox.items():
-                    try: temp_bbox[k] = float(v)
-                    except (ValueError, TypeError): logger.debug(f"Could not convert bbox value '{v}' (key: '{k}') to float for node {node_id}.") # Debug level for this
-                if temp_bbox: validated_bbox = temp_bbox
-                # else: logger.debug(f"Resulting bbox for node {node_id} is empty after validation. Original: {raw_bbox}")
-
-            pdf_url = ""
-            if filename:
-                safe_filename = urllib.parse.quote(str(filename))
-                pdf_url = f"{BACKEND_URL}/document_sets/{sanitized_name}/documents/{safe_filename}"
-            else:
-                 logger.warning(f"Filename missing in metadata for node {node_id} in set {sanitized_name}")
-
-            chunk = ChunkResponse(
-                id=node_id,
-                text=node.text or "",
-                pdfUrl=pdf_url,
-                position=ChunkPosition(
-                    pageNumber=page_num,
-                    bbox=validated_bbox,
-                    coord_origin=coord_origin
-                ),
-                pageNumber=page_num,
-                metadata=metadata # Send enhanced metadata back
-            )
-            processed_chunks.append(chunk)
-            # --- End Create Chunk ---
-
-        logger.info(f"Returning RAG answer and {len(processed_chunks)} processed chunks for set '{sanitized_name}'.")
-        return RagAnswerResponse(answer=answer, chunks=processed_chunks)
+        return RagAnswerResponse(
+             answer=str(response.response or "Could not generate an answer based on the provided documents."), # Get answer text from response object
+             chunks=chunks
+         )
 
     except HTTPException:
-        raise # Re-raise client/server errors (404, 503 etc.)
+        raise
     except Exception as e:
-        logger.error(f"Unexpected error during RAG query for set '{sanitized_name}': {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"An internal error occurred while processing the query for set '{sanitized_name}'.")
-
-# --- Root and Health Check ---
-@app.get("/")
-async def root():
-    """Root endpoint providing basic API info."""
-    return {
-        "message": "Document Set Q&A API is running",
-        "status_endpoint": "/health",
-        "api_version": "2.0.0-lifespan", # Indicate version with lifespan fix
-        "document_set_directory": DOCUMENT_SET_DIR,
-        "endpoints": {
-            "/document_sets": "GET - List sets; POST - Create set",
-            "/document_sets/{set_name}": "DELETE - Delete set",
-            "/document_sets/{set_name}/documents/{filename}": "GET - Serve PDF",
-            "/rag": "POST - Query a document set"
-        }
-    }
+        logger.error(f"Error performing RAG query for set '{sanitized_name}': {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error performing RAG query: {e}")
 
 @app.get("/health")
 async def health_check():
     """
-    Health check endpoint. Returns 200 OK if essential services are available,
-    otherwise returns 503 Service Unavailable with details.
-    Checks: Base directory exists, LLM client initialized, Embedding client initialized.
+    Health check endpoint to verify the API is running and its components are healthy.
+    Returns 200 OK if healthy, 503 Service Unavailable if unhealthy.
     """
+    # Check if models are initialized
     llm_ok = Settings.llm is not None
     embed_ok = Settings.embed_model is not None
-    dir_ok = False
+    
+    # Check if document directory exists
+    dir_ok = os.path.exists(DOCUMENT_SET_DIR) and os.path.isdir(DOCUMENT_SET_DIR)
     dir_error = None
-    try:
-        dir_ok = os.path.exists(DOCUMENT_SET_DIR) and os.path.isdir(DOCUMENT_SET_DIR)
-        if not dir_ok:
-            dir_error = f"Base directory '{DOCUMENT_SET_DIR}' not found or not a directory."
-    except Exception as e:
-        dir_error = f"Error checking base directory '{DOCUMENT_SET_DIR}': {str(e)}"
-        logger.error(f"Health check failed checking directory: {e}", exc_info=True)
-
-
+    
+    if not dir_ok:
+        dir_error = f"Document directory not found or not a directory: {DOCUMENT_SET_DIR}"
+        logger.warning(dir_error)
+    
+    # Compile status details
     status_details = {
         "llm_initialized": llm_ok,
         "embedding_model_initialized": embed_ok,
@@ -1021,14 +998,159 @@ async def health_check():
             content={"status": "unhealthy", "details": status_details}
         )
 
-# --- Catch-all for debugging (optional, uncomment if needed) ---
-# @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"], include_in_schema=False)
-# async def catch_all(request: Request, path: str):
-#     logger.error(f"404 Not Found: {request.method} {request.url}")
-#     body = await request.body()
-#     logger.debug(f"Request Body (if any): {body.decode() if body else 'No Body'}")
-#     logger.debug(f"Request Headers: {request.headers}")
-#     return JSONResponse(status_code=404, content={"detail": f"Route not found: {request.method} /{path}"})
+# --- NEW ENDPOINT ---
+@app.get("/document_sets/{set_name}/files", response_model=List[str])
+async def list_files_in_document_set(set_name: str):
+    """List the final (PDF) files currently present in a document set's directory."""
+    sanitized_set_name = sanitize_name(set_name)
+    docs_path = get_set_docs_path(sanitized_set_name)
+
+    if not os.path.isdir(docs_path):
+        logger.error(f"Attempted to list files for non-existent set directory: {docs_path}")
+        raise HTTPException(status_code=404, detail=f"Document set '{sanitized_set_name}' not found.")
+
+    try:
+        # List files, ensuring they are actually files (not directories)
+        # We rely on the store_uploaded_files logic having produced the final .pdf names
+        filenames = [
+            f for f in os.listdir(docs_path)
+            if os.path.isfile(os.path.join(docs_path, f)) and not f.startswith('temp_') # Exclude potential leftover temp files
+        ]
+        logger.info(f"Found {len(filenames)} file(s) in set '{sanitized_set_name}'.")
+        return sorted(filenames) # Return sorted list
+    except Exception as e:
+        logger.error(f"Error listing files for set '{sanitized_set_name}': {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error listing files for set '{sanitized_set_name}'.")
+# --- END NEW ENDPOINT ---
+
+# --- Helper to Rebuild Index --- (NEW)
+async def _rebuild_set_index(sanitized_set_name: str):
+    """Helper function to rebuild the index for a set after changes."""
+    logger.info(f"Starting index rebuild process for set '{sanitized_set_name}'...")
+    docs_path = get_set_docs_path(sanitized_set_name)
+    if not os.path.isdir(docs_path):
+        logger.error(f"Cannot rebuild index: Documents directory not found for set '{sanitized_set_name}'.")
+        return False # Indicate failure
+
+    try:
+        # Get all current PDF files in the directory
+        current_files = [
+            os.path.join(docs_path, f)
+            for f in os.listdir(docs_path)
+            if os.path.isfile(os.path.join(docs_path, f)) and f.lower().endswith('.pdf')
+        ]
+
+        if not current_files:
+            logger.warning(f"No PDF files found in '{docs_path}' for set '{sanitized_set_name}'. Clearing index.")
+            # If no files, ensure the Chroma DB is cleared/reset
+            storage_context = get_chroma_storage_context(sanitized_set_name)
+            # Potential issue: get_chroma_storage_context currently DELETES the dir.
+            # We might need a gentler clear if the dir should persist empty.
+            # For now, recreating it empty should be okay.
+            logger.info(f"Index cleared/reset for empty set '{sanitized_set_name}'.")
+            return True # Technically successful in representing the empty state
+
+        logger.info(f"Found {len(current_files)} files to re-index for set '{sanitized_set_name}'.")
+        # Use run_in_executor for the potentially long-running process_and_index_files
+        # Ensure we run this synchronously within the helper context
+        # loop = asyncio.get_running_loop()
+        # success = await loop.run_in_executor(
+        #     None, process_and_index_files, sanitized_set_name, current_files
+        # )
+        # Let's try running it directly if process_and_index_files is synchronous
+        # If process_and_index_files becomes async itself, we can await it.
+        # Assuming process_and_index_files is blocking/synchronous:
+        success = process_and_index_files(sanitized_set_name, current_files)
+
+        if success:
+            logger.info(f"Successfully rebuilt index for set '{sanitized_set_name}'.")
+            return True
+        else:
+            logger.error(f"Failed to rebuild index for set '{sanitized_set_name}'.")
+            return False
+    except Exception as e:
+        logger.error(f"Error during index rebuild for set '{sanitized_set_name}': {e}", exc_info=True)
+        return False
+# --- End Helper ---
+
+# --- DELETE Single File Endpoint --- (NEW)
+@app.delete("/document_sets/{set_name}/documents/{filename}", status_code=202) # 202 Accepted as index rebuild runs in background
+async def delete_file_from_document_set(set_name: str, filename: str):
+    """Delete a specific file from a document set and trigger re-indexing."""
+    sanitized_set_name = sanitize_name(set_name)
+    try:
+        # Decode filename just in case it's URL encoded (though usually path params aren't)
+        decoded_filename = urllib.parse.unquote(filename)
+    except Exception as decode_err:
+        logger.error(f"Error decoding filename '{filename}': {decode_err}")
+        raise HTTPException(status_code=400, detail=f"Invalid filename format: {filename}")
+
+    docs_path = get_set_docs_path(sanitized_name)
+    file_path = os.path.join(docs_path, decoded_filename)
+
+    logger.info(f"Attempting to delete file: '{file_path}' from set '{sanitized_set_name}'")
+
+    if not os.path.isfile(file_path):
+        logger.error(f"File not found for deletion: {file_path}")
+        # Return 404 even if the set exists but the file doesn't
+        raise HTTPException(status_code=404, detail=f"File '{decoded_filename}' not found in set '{sanitized_set_name}'.")
+
+    try:
+        os.remove(file_path)
+        logger.info(f"Successfully deleted file: {file_path}")
+    except OSError as e:
+        logger.error(f"Error deleting file '{file_path}': {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to delete file '{decoded_filename}': {e}")
+
+    # Trigger background re-indexing AFTER successful deletion
+    # Use asyncio.create_task to run the async helper in the background
+    try:
+        logger.info(f"Scheduling background index rebuild for set '{sanitized_set_name}' after deleting file '{decoded_filename}'...")
+        asyncio.create_task(_rebuild_set_index(sanitized_set_name))
+    except Exception as schedule_err:
+        logger.error(f"Error scheduling background index rebuild for set '{sanitized_set_name}' after deletion: {schedule_err}", exc_info=True)
+        # Return success for deletion, but warn about indexing
+        return {"message": f"File '{decoded_filename}' deleted, but failed to schedule background re-indexing. Manual rebuild might be needed."}
+
+    return {"message": f"File '{decoded_filename}' deleted successfully. Re-indexing started in the background."}
+# --- END DELETE Single File Endpoint ---
+
+# --- MODIFIED: Add Files Endpoint (Now uses _rebuild_set_index helper) ---
+@app.post("/document_sets/{set_name}/add_files", status_code=202) # 202 Accepted for background task
+async def add_files_to_document_set(set_name: str, files: List[UploadFile] = File(...)):
+    # ...(existing code to check set exists, check files provided, call store_uploaded_files)... 
+    sanitized_set_name = sanitize_name(set_name)
+    set_base_path = get_set_base_path(sanitized_set_name)
+
+    if not os.path.isdir(set_base_path):
+        logger.error(f"Attempted to add files to non-existent set: {sanitized_set_name}")
+        raise HTTPException(status_code=404, detail=f"Document set '{sanitized_set_name}' not found.")
+
+    if not files:
+        raise HTTPException(status_code=400, detail="At least one file must be provided.")
+
+    try:
+        logger.info(f"Adding {len(files)} file(s) to set '{sanitized_set_name}'...")
+        newly_saved_paths = store_uploaded_files(sanitized_set_name, files)
+        if not newly_saved_paths:
+            raise HTTPException(status_code=400, detail="None of the provided files could be saved or processed.")
+        logger.info(f"Successfully saved {len(newly_saved_paths)} new file(s) for set '{sanitized_set_name}'.")
+    except Exception as store_err:
+        logger.error(f"Error saving uploaded files for set '{sanitized_set_name}': {store_err}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error saving files: {store_err}")
+
+    # Trigger background re-indexing USING THE HELPER
+    # Use asyncio.create_task to run the async helper in the background
+    try:
+        logger.info(f"Scheduling background index rebuild for set '{sanitized_set_name}' after adding files...")
+        asyncio.create_task(_rebuild_set_index(sanitized_set_name))
+    except Exception as schedule_err:
+        logger.error(f"Error scheduling background index rebuild for set '{sanitized_set_name}' after adding files: {schedule_err}", exc_info=True)
+        # Return success for add, but warn about indexing
+        return {"message": f"Files added to set '{sanitized_set_name}', but failed to schedule background re-indexing. Manual rebuild might be needed."}
+
+    return {"message": f"Successfully added {len(newly_saved_paths)} file(s) to set '{sanitized_set_name}'. Re-indexing started in the background."}
+# --- END MODIFIED Add Files ---
 
 # --- Main execution block (for local development) ---
 if __name__ == "__main__":

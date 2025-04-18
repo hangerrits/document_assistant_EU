@@ -70,8 +70,25 @@ function SetSelector({ onSetSelected, backendUrl }) {
   const [isDeleting, setIsDeleting] = useState(null); // Store name of set being deleted
   const [deleteError, setDeleteError] = useState('');
   const [deleteStatus, setDeleteStatus] = useState('');
-  
+
+  // --- State for Update Mode --- (NEW)
+  const [updatingSetName, setUpdatingSetName] = useState(null); // Track which set is being updated
+  const [filesInUpdatingSet, setFilesInUpdatingSet] = useState([]);
+  const [originalFilesInUpdateSet, setOriginalFilesInUpdateSet] = useState([]);
+  const [newFilesInUpdateMode, setNewFilesInUpdateMode] = useState([]); // Files staged for ADDITION in update mode
+  const [isLoadingFiles, setIsLoadingFiles] = useState(false);
+  const [updateError, setUpdateError] = useState(''); // Errors specific to fetching files or the update process
+  const [isSavingUpdate, setIsSavingUpdate] = useState(false); // Loading state for save
+  // --- End Update Mode State ---
+
   const fileInputRef = useRef(null);
+  const updateFileInputRef = useRef(null); // Ref for the file input in update mode
+  const addFilesInputRef = useRef(null); // Ref for the hidden input for adding files
+
+  // State for adding files status (We might merge this into general update status later)
+  const [isAddingFiles, setIsAddingFiles] = useState(null); // Store name of set being updated
+  const [addFilesError, setAddFilesError] = useState('');
+  const [addFilesStatus, setAddFilesStatus] = useState('');
   
   // Fetch existing sets on component mount
   const fetchSets = useCallback(async () => {
@@ -99,15 +116,16 @@ function SetSelector({ onSetSelected, backendUrl }) {
 
   // Handle file selection for new set
   const handleFileChange = (e) => {
-    const pdfFiles = Array.from(e.target.files).filter(
-      file => file.type === 'application/pdf'
-    );
-    if (pdfFiles.length > 0) {
-      setSelectedFiles(prevFiles => [...prevFiles, ...pdfFiles]);
-      setCreateError(''); // Clear error when files are selected
-    } else if (e.target.files.length > 0) {
-        setCreateError('Please select PDF files only.');
+    // Directly use all selected files, remove the PDF filter
+    const files = Array.from(e.target.files);
+
+    if (files.length > 0) {
+      // Append all selected files
+      setSelectedFiles(prevFiles => [...prevFiles, ...files]);
+      setCreateError(''); // Clear any previous errors
     }
+    // Remove the "else if" that checked for non-PDFs and set the error
+
     // Reset file input to allow selecting the same file again
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -213,7 +231,213 @@ function SetSelector({ onSetSelected, backendUrl }) {
         setIsDeleting(null); // Reset deleting status
     }
   };
-  
+
+  // --- Fetch Files for a Specific Set --- (NEW)
+  const fetchFilesInSet = async (setName) => {
+      setUpdatingSetName(setName); // Set the name first to trigger UI change
+      setIsLoadingFiles(true);
+      setFilesInUpdatingSet([]);
+      setUpdateError('');
+      try {
+          const encodedSetName = encodeURIComponent(setName);
+          const response = await fetch(`${backendUrl}/document_sets/${encodedSetName}/files`);
+          if (!response.ok) {
+              const errorData = await response.json().catch(() => ({})); // Try parsing error
+              throw new Error(`Failed to fetch files: ${response.status} ${errorData.detail || response.statusText}`);
+          }
+          const fileList = await response.json();
+          setFilesInUpdatingSet(fileList || []);
+          setOriginalFilesInUpdateSet(fileList || []); // <-- Store the original list
+      } catch (err) {
+          console.error(`Error fetching files for set '${setName}':`, err);
+          setUpdateError(`Could not load files for set '${setName}': ${err.message}`);
+          setUpdatingSetName(null); // Clear updating state on error
+      } finally {
+          setIsLoadingFiles(false);
+      }
+  };
+  // ----------------------------------------
+
+  // --- Handle Adding Files to an Existing Set --- (Keep for now, maybe refactor later)
+  const handleAddFiles = async (setNameToAdd, event) => {
+      if (!setNameToAdd || !event.target.files || event.target.files.length === 0) {
+          // Might happen if the hidden input is triggered without a target set name
+          if (addFilesInputRef.current) addFilesInputRef.current.value = ''; // Clear input
+          return;
+      }
+
+      const filesToAdd = Array.from(event.target.files);
+      console.log(`Adding ${filesToAdd.length} files to set: ${setNameToAdd}`);
+
+      setIsAddingFiles(setNameToAdd); // Indicate which set is being updated
+      setAddFilesError('');
+      setAddFilesStatus(`Adding ${filesToAdd.length} file(s) to ${setNameToAdd}...`);
+
+      const formData = new FormData();
+      filesToAdd.forEach(file => {
+          formData.append('files', file);
+      });
+
+      try {
+          const encodedSetName = encodeURIComponent(setNameToAdd);
+          const response = await fetch(`${backendUrl}/document_sets/${encodedSetName}/add_files`, {
+              method: 'POST',
+              body: formData,
+          });
+
+          const responseData = await response.json();
+
+          if (!response.ok) {
+              const errorDetail = responseData.detail || response.statusText;
+              throw new Error(`Failed to add files: ${response.status} ${errorDetail}`);
+          }
+
+          setAddFilesStatus(responseData.message || `Files added to ${setNameToAdd}. Re-indexing started.`);
+          // Clear success message after delay
+          setTimeout(() => setAddFilesStatus(''), 5000);
+
+      } catch (err) {
+          console.error(`Error adding files to set '${setNameToAdd}':`, err);
+          setAddFilesError(`Failed to add files to ${setNameToAdd}: ${err.message}`);
+          // Clear error message after delay
+          setTimeout(() => setAddFilesError(''), 7000);
+          setAddFilesStatus(''); // Clear status on error
+      } finally {
+          setIsAddingFiles(null); // Reset adding status
+          // Clear the hidden file input
+          if (addFilesInputRef.current) {
+              addFilesInputRef.current.value = '';
+          }
+      }
+  };
+  // ---------------------------------------------
+
+  // --- File Handling for Update Mode --- (NEW)
+  const handleAddNewFilesInUpdate = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length > 0) {
+      // Basic validation (e.g., prevent duplicates if needed)
+      const uniqueNewFiles = files.filter(
+          (newFile) =>
+              !filesInUpdatingSet.some(existing => existing === newFile.name) &&
+              !newFilesInUpdateMode.some(staged => staged.name === newFile.name)
+      );
+      setNewFilesInUpdateMode(prev => [...prev, ...uniqueNewFiles]);
+      setUpdateError(''); // Clear error on successful selection
+    }
+    // Reset file input
+    if (updateFileInputRef.current) {
+      updateFileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemoveExistingFile = (fileNameToRemove) => {
+    setFilesInUpdatingSet(prev => prev.filter(fileName => fileName !== fileNameToRemove));
+  };
+
+  const handleRemoveNewFile = (indexToRemove) => {
+    setNewFilesInUpdateMode(prev => prev.filter((_, i) => i !== indexToRemove));
+  };
+
+  // Placeholder for Save Changes function (Phase 4)
+  const handleSaveChanges = async () => { // --- IMPLEMENTED --- 
+      setIsSavingUpdate(true);
+      setUpdateError('');
+      console.log("--- Save Changes Triggered ---");
+      console.log("Set Name:", updatingSetName);
+      console.log("Original Files:", originalFilesInUpdateSet);
+      console.log("Current Files (To Keep):", filesInUpdatingSet);
+      console.log("New Files to Add:", newFilesInUpdateMode);
+      const filesToDelete = originalFilesInUpdateSet.filter(
+          fname => !filesInUpdatingSet.includes(fname)
+      );
+      console.log("Files to Delete:", filesToDelete);
+
+      let deleteSuccess = true;
+      let addSuccess = true;
+      let finalMessage = "Changes saved.";
+      let encounteredError = null;
+
+      // --- 1. Perform Deletions --- 
+      if (filesToDelete.length > 0) {
+          console.log(`Attempting to delete ${filesToDelete.length} file(s)...`);
+          for (const filename of filesToDelete) {
+              try {
+                  const encodedSetName = encodeURIComponent(updatingSetName);
+                  const encodedFilename = encodeURIComponent(filename);
+                  const deleteUrl = `${backendUrl}/document_sets/${encodedSetName}/documents/${encodedFilename}`;
+                  console.log(`Calling DELETE: ${deleteUrl}`);
+                  const response = await fetch(deleteUrl, {
+                      method: 'DELETE',
+                  });
+                  const responseData = await response.json().catch(() => ({})); // Try parsing JSON
+                  if (!response.ok) {
+                       const errorDetail = responseData.detail || response.statusText || `HTTP ${response.status}`;
+                      throw new Error(`Failed to delete '${filename}': ${errorDetail}`);
+                  }
+                  console.log(`Successfully deleted '${filename}'. Response:`, responseData);
+              } catch (err) {
+                  console.error(err);
+                  setUpdateError(`Error deleting file '${filename}': ${err.message}`);
+                  deleteSuccess = false;
+                  encounteredError = err.message;
+                  break; // Stop further deletions on error
+              }
+          }
+      }
+
+      // --- 2. Perform Additions --- 
+      if (deleteSuccess && newFilesInUpdateMode.length > 0) {
+          console.log(`Attempting to add ${newFilesInUpdateMode.length} file(s)...`);
+          const formData = new FormData();
+          newFilesInUpdateMode.forEach(file => {
+              formData.append('files', file);
+          });
+
+          try {
+              const encodedSetName = encodeURIComponent(updatingSetName);
+              const addUrl = `${backendUrl}/document_sets/${encodedSetName}/add_files`;
+              console.log(`Calling POST: ${addUrl}`);
+              const response = await fetch(addUrl, {
+                  method: 'POST',
+                  body: formData,
+              });
+              const responseData = await response.json().catch(() => ({})); // Try parsing JSON
+              if (!response.ok) {
+                  const errorDetail = responseData.detail || response.statusText || `HTTP ${response.status}`;
+                  throw new Error(`Failed to add files: ${errorDetail}`);
+              }
+              console.log("Successfully added new files. Response:", responseData);
+              // Use message from backend if available
+              if (responseData.message) finalMessage = responseData.message;
+          } catch (err) {
+              console.error(err);
+              setUpdateError(`Error adding new files: ${err.message}`);
+              addSuccess = false;
+              encounteredError = err.message;
+          }
+      }
+
+      console.log("--- Save Changes Complete (Actual) ---");
+      setIsSavingUpdate(false);
+
+      if (deleteSuccess && addSuccess) {
+          setUpdateError(''); // Clear error on full success
+          setUpdatingSetName(null); // Exit update mode
+          setNewFilesInUpdateMode([]); // Clear staged files
+          setOriginalFilesInUpdateSet([]); // Clear original list
+          fetchSets(); // Refresh the main set list
+          // Optionally show a success message? Could use deleteStatus/addFilesStatus
+          setDeleteStatus(finalMessage); // Reuse delete status for general success message
+          setTimeout(() => setDeleteStatus(''), 5000); // Clear after delay
+      } else {
+          // If something failed, keep the update view open with the error
+          setUpdateError(`Save failed: ${encounteredError || 'Unknown error'}. Some changes might not have been saved. Please review and try again.`);
+          // Optionally refetch the file list to show the current state after partial failure?
+          // fetchFilesInSet(updatingSetName); // Re-fetches, might clear user's unsaved adds
+      }
+  };
+
   // Render the Set Selector UI
   return (
     <div className="set-selector-container"> {/* Updated class name */} 
@@ -222,119 +446,231 @@ function SetSelector({ onSetSelected, backendUrl }) {
         <p>Select an existing document set or create a new one</p>
       </div>
       
-      <div className="set-selector-content"> {/* Updated class name */} 
-        {/* Section for Existing Sets */}
-        <div className="existing-sets-section"> {/* Updated class name */} 
-          <h2>Existing Document Sets</h2>
-          {/* Display Deletion Status/Error */}
-          {deleteStatus && <div className="status-message success">{deleteStatus}</div>}
-          {deleteError && <div className="error-message delete-error">{deleteError}</div>}
-          {isLoadingList ? (
-            <p>Loading sets...</p>
-          ) : listError ? (
-            <div className="error-message">{listError}</div>
-          ) : setList.length === 0 ? (
-            <p>No existing document sets found.</p>
-          ) : (
-            <ul className="set-list"> {/* Updated class name */} 
-              {setList.map(setName => (
-                <li key={setName} className="set-list-item"> {/* Updated class name */} 
-                  <span>{setName}</span>
-                  <div className="set-item-buttons">
-                    <button 
-                      onClick={() => onSetSelected(setName)}
-                      disabled={isDeleting === setName} // Disable if being deleted
-                    >
-                      Select
-                    </button>
-                    <button 
-                      className="delete-button" 
-                      onClick={() => handleDeleteSet(setName)}
-                      disabled={isDeleting === setName} // Disable if being deleted
-                      title={`Delete set '${setName}'`}
-                    >
-                       {isDeleting === setName ? 'Deleting...' : 'Delete'}
-                    </button>
-                   </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+      {/* CONDITIONAL RENDERING: Show Update View or Main View */}
+      {updatingSetName ? (
+        // --- UPDATE VIEW --- (Basic structure for now)
+        <div className="update-set-view">
+            <h2>Update Set: {updatingSetName}</h2>
+            {isLoadingFiles && <p>Loading files...</p>}
+            {updateError && <div className="error-message">{updateError}</div>}
 
-        {/* Divider */}
-        <hr className="set-selector-divider" /> {/* Updated class name */} 
-
-        {/* Section for Creating a New Set */}
-        <div className="create-set-section"> {/* Updated class name */} 
-          <h2>Create New Document Set</h2>
-          <div className="create-set-form"> {/* Updated class name */} 
-            <input
-              type="text"
-              placeholder="Enter name for new set..."
-              value={newSetName}
-              onChange={(e) => setNewSetName(e.target.value)}
-              disabled={isCreating}
-              className="set-name-input" /* Optional: specific class */
-            />
-
-            <div className="file-drop-area-small" /* Optional: smaller drop area */
-                 onClick={() => !isCreating && fileInputRef.current?.click()}> 
-          <input
-            type="file"
-            accept=".pdf"
-            multiple
-            onChange={handleFileChange}
-            ref={fileInputRef}
-            style={{ display: 'none' }}
-                disabled={isCreating}
-          />
-              <div className="drop-message-small"> {/* Optional: smaller message */} 
-                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="17 8 12 3 7 8"></polyline>
-              <line x1="12" y1="3" x2="12" y2="15"></line>
-            </svg>
-                <p>{selectedFiles.length > 0 ? `${selectedFiles.length} file(s) selected` : 'Click or drag PDF files here'}</p>
-          </div>
-        </div>
-        
-            {selectedFiles.length > 0 && (
-              <div className="file-list-small"> {/* Optional: smaller list */} 
-                {/* <h4>Selected Files:</h4> */}
-                <ul>
-                  {selectedFiles.map((file, index) => (
-                    <li key={index} className="file-item-small"> {/* Optional: smaller item */} 
-                  <span className="file-name">{file.name}</span>
-                  <span className="file-size">({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
-                  <button 
-                    className="remove-file-btn"
-                    onClick={() => handleRemoveFile(index)}
-                        disabled={isCreating}
-                  >
-                    &times;
-                  </button>
-                </li>
-              ))}
-            </ul>
-              </div>
+            {/* Combined File List */}
+            {!isLoadingFiles && (filesInUpdatingSet.length > 0 || newFilesInUpdateMode.length > 0) && (
+                 <div>
+                     <h3>Files in Set:</h3>
+                     <ul className="file-list-small update-file-list"> {/* Use similar styling */} 
+                         {/* Existing Files */} 
+                         {filesInUpdatingSet.map(fileName => (
+                             <li key={`existing-${fileName}`} className="file-item-small existing-file">
+                                 <span className="file-name">{fileName}</span>
+                                 {/* Calculate size maybe later? */} 
+                                 <button
+                                     className="remove-file-btn"
+                                     onClick={() => handleRemoveExistingFile(fileName)}
+                                     disabled={isSavingUpdate}
+                                     title={`Remove ${fileName}`}
+                                 >
+                                     &times;
+                                 </button>
+                             </li>
+                         ))}
+                         {/* New Files Staged for Addition */} 
+                         {newFilesInUpdateMode.map((file, index) => (
+                             <li key={`new-${index}-${file.name}`} className="file-item-small new-file">
+                                 <span className="file-name">{file.name}</span>
+                                 <span className="file-size">({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
+                                 <span className="file-tag new-tag">(new)</span>
+                                 <button
+                                     className="remove-file-btn"
+                                     onClick={() => handleRemoveNewFile(index)}
+                                     disabled={isSavingUpdate}
+                                 >
+                                     &times;
+                                 </button>
+                             </li>
+                         ))}
+                     </ul>
+                 </div>
             )}
-            
-            <button 
-              className="create-set-btn" /* Optional: specific class */
-              onClick={handleCreateSet}
-              disabled={isCreating || !newSetName.trim() || selectedFiles.length === 0}
-            >
-              {isCreating ? 'Creating...' : 'Create Document Set'}
-            </button>
-            
-            {isCreating && <div className="status-message">{createStatus}</div>}
-            {createError && <div className="error-message create-error">{createError}</div>} 
-            {!isCreating && createStatus && <div className="status-message success">{createStatus}</div>} 
+            {!isLoadingFiles && filesInUpdatingSet.length === 0 && newFilesInUpdateMode.length === 0 && !updateError && (
+                 <p>This set currently has no files. Add some below.</p>
+            )}
+
+            {/* File Input Area */} 
+            {!isLoadingFiles && (
+                <div className="file-drop-area-small update-drop-area"
+                    onClick={() => !isSavingUpdate && updateFileInputRef.current?.click()}
+                >
+                    <input
+                        type="file"
+                        multiple
+                        onChange={handleAddNewFilesInUpdate}
+                        ref={updateFileInputRef}
+                        style={{ display: 'none' }}
+                        disabled={isSavingUpdate}
+                    />
+                    <div className="drop-message-small">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                        <p>Click or drag NEW files here to add</p>
+                    </div>
+                </div>
+            )}
+
+            {/* Controls */}
+            <div className="update-controls">
+                <button
+                     className="cancel-update-btn"
+                     onClick={() => { setUpdatingSetName(null); setNewFilesInUpdateMode([]); setUpdateError(''); }}
+                     disabled={isSavingUpdate}
+                 >
+                    Cancel
+                 </button>
+                <button
+                     className="create-set-btn"
+                     onClick={handleSaveChanges}
+                     disabled={isSavingUpdate || isLoadingFiles}
+                     // Disable if no changes? (Optional: track original file list vs current)
+                 >
+                     {isSavingUpdate ? 'Saving...' : 'Save Changes'}
+                 </button>
+            </div>
+        </div>
+        // --- END UPDATE VIEW ---
+
+      ) : (
+        // --- MAIN VIEW (Existing Sets + Create New) ---
+        <div className="set-selector-content"> {/* Updated class name */} 
+          {/* Section for Existing Sets */}
+          <div className="existing-sets-section"> {/* Updated class name */} 
+            <h2>Existing Document Sets</h2>
+            {/* Display General Status/Error Messages */} 
+            {deleteStatus && <div className="status-message success">{deleteStatus}</div>}
+            {deleteError && <div className="error-message delete-error">{deleteError}</div>}
+            {addFilesStatus && <div className="status-message">{addFilesStatus}</div>} {/* Keep for now */}
+            {addFilesError && <div className="error-message add-files-error">{addFilesError}</div>} {/* Keep for now */}
+            {isLoadingList ? (
+              <p>Loading sets...</p>
+            ) : listError ? (
+              <div className="error-message">{listError}</div>
+            ) : setList.length === 0 ? (
+              <p>No existing document sets found.</p>
+            ) : (
+              <ul className="set-list"> {/* Updated class name */} 
+                {setList.map(setName => (
+                  <li key={setName} className="set-list-item"> {/* Updated class name */} 
+                    <span>{setName}</span>
+                    <div className="set-item-buttons">
+                      <button 
+                        onClick={() => onSetSelected(setName)}
+                        disabled={!!updatingSetName || isDeleting === setName || !!isAddingFiles} // Disable if updating any set
+                      >
+                        Select
+                      </button>
+                      {/* --- UPDATE Button --- */}
+                      <button
+                        className="update-button" // New class for styling
+                        onClick={() => fetchFilesInSet(setName)} // Fetch files and enter update mode
+                        disabled={isDeleting === setName || !!isAddingFiles || !!updatingSetName}
+                        title={`Update files in set '${setName}'`}
+                      >
+                        Update
+                      </button>
+                      {/* -------------------- */}
+                      {/* Add Files Button Removed - Replaced by Update */}
+                      <button
+                        className="delete-button"
+                        onClick={() => handleDeleteSet(setName)}
+                        disabled={!!updatingSetName || isDeleting === setName || !!isAddingFiles}
+                        title={`Delete set '${setName}'`}
+                      >
+                        {isDeleting === setName ? 'Deleting...' : 'Delete'}
+                      </button>
+                     </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Divider */}
+          <hr className="set-selector-divider" /> {/* Updated class name */} 
+
+          {/* Section for Creating a New Set */}
+          <div className="create-set-section"> {/* Updated class name */} 
+            <h2>Create New Document Set</h2>
+            <div className="create-set-form"> {/* Updated class name */} 
+              <input
+                type="text"
+                placeholder="Enter name for new set..."
+                value={newSetName}
+                onChange={(e) => setNewSetName(e.target.value)}
+                disabled={isCreating || !!updatingSetName} // Disable if updating
+                className="set-name-input" /* Optional: specific class */
+              />
+
+              <div className="file-drop-area-small" /* Optional: smaller drop area */
+                   onClick={() => !isCreating && !updatingSetName && fileInputRef.current?.click()}> 
+                <input
+                  type="file"
+                  // accept=".pdf" // Removed to allow all file types
+                  multiple
+                  onChange={handleFileChange}
+                  ref={fileInputRef}
+                  style={{ display: 'none' }}
+                  disabled={isCreating || !!updatingSetName}
+                />
+                <div className="drop-message-small"> {/* Optional: smaller message */} 
+                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+                  <p>{selectedFiles.length > 0 ? `${selectedFiles.length} file(s) selected` : 'Click or drag files here'}</p>
+                </div>
+              </div>
+              
+              {selectedFiles.length > 0 && (
+                <div className="file-list-small"> {/* Optional: smaller list */} 
+                  {/* <h4>Selected Files:</h4> */}
+                  <ul>
+                    {selectedFiles.map((file, index) => (
+                      <li key={index} className="file-item-small"> {/* Optional: smaller item */} 
+                    <span className="file-name">{file.name}</span>
+                    <span className="file-size">({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
+                    <button 
+                      className="remove-file-btn"
+                      onClick={() => handleRemoveFile(index)}
+                      disabled={isCreating || !!updatingSetName}
+                    >
+                      &times;
+                    </button>
+                  </li>
+                ))}
+              </ul>
+                </div>
+              )}
+              
+              <button 
+                className="create-set-btn" /* Optional: specific class */
+                onClick={handleCreateSet}
+                disabled={isCreating || !!updatingSetName || !newSetName.trim() || selectedFiles.length === 0}
+              >
+                {isCreating ? 'Creating...' : 'Create Document Set'}
+              </button>
+              
+              {isCreating && <div className="status-message">{createStatus}</div>}
+              {createError && <div className="error-message create-error">{createError}</div>} 
+              {!isCreating && createStatus && <div className="status-message success">{createStatus}</div>} 
 
             </div>
           </div>
-      </div>
+        </div>
+        // --- END MAIN VIEW ---
+      )}
     </div>
   );
 }
@@ -362,7 +698,6 @@ function Chatbot({ setName, onBack, backendUrl }) { // Accept setName prop
   const [highlightAreas, setHighlightAreas] = useState([]);
   const [pdfProxy, setPdfProxy] = useState(null);
   const [currentPdfOriginalUrl, setCurrentPdfOriginalUrl] = useState(null);
-  const [showDebugInfo, setShowDebugInfo] = useState(false);
   const [showChunkBrowser, setShowChunkBrowser] = useState(false);
   const [allChunks, setAllChunks] = useState([]); 
   const [lastRenderedPage, setLastRenderedPage] = useState(null);
@@ -860,7 +1195,6 @@ function Chatbot({ setName, onBack, backendUrl }) { // Accept setName prop
   const scrollToBottom = () => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); };
   const zoomIn = () => setScale(prev => Math.min(prev + 0.2, 3.0));
   const zoomOut = () => setScale(prev => Math.max(prev - 0.2, 0.5));
-  const toggleDebugInfo = () => setShowDebugInfo(prev => !prev);
 
   // --- Toggle Chunk Browser (UPDATED for new chunk data structure if needed) ---
   const toggleChunkBrowser = useCallback(() => {
